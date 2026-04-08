@@ -1,0 +1,26 @@
+# Dev environment overrides
+replicaCount: 1
+
+image:
+  tag: dev-latest
+
+env:
+  NODE_ENV: development
+  LOG_LEVEL: debug
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 3
+
+networkPolicy:
+  enabled: false
+
+podAntiAffinity: false

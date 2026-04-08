@@ -1,0 +1,61 @@
+# Default values for virallens-inference
+
+replicaCount: 3
+
+image:
+  repository: gcr.io/virallens/inference-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+env:
+  NODE_ENV: production
+  PORT: "3000"
+  MODEL_VERSION: v1.0.0
+  LOG_LEVEL: info
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 50
+  targetCPUUtilization: 65
+  targetMemoryUtilization: 75
+
+networkPolicy:
+  enabled: true
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 15
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  startup:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 12
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+podAntiAffinity: true
+topologySpreadConstraints: false

@@ -1,0 +1,13 @@
+# Staging environment overrides
+replicaCount: 2
+
+image:
+  tag: staging-latest
+
+env:
+  NODE_ENV: staging
+  LOG_LEVEL: info
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 10

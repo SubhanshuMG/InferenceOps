@@ -1,0 +1,163 @@
+// ==========================================================================
+// Virallens Inference Service – CI/CD Pipeline
+// Stages: Lint → Test → Build → Push → Deploy Staging → Approve → Deploy Prod
+// ==========================================================================
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_REPO    = 'gcr.io/virallens/inference-service'
+        IMAGE_TAG     = "${env.GIT_COMMIT?.take(8) ?: 'latest'}"
+        GCP_PROJECT   = 'virallens'
+        CLUSTER_NAME  = 'virallens-gke'
+        CLUSTER_ZONE  = 'us-central1-a'
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    stages {
+
+        // ------------------------------------------------------------------
+        // Stage 1: Lint
+        // ------------------------------------------------------------------
+        stage('Lint') {
+            steps {
+                dir('app') {
+                    sh 'npm ci'
+                    sh 'npm run lint || true'   // non-blocking for now
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 2: Unit Tests
+        // ------------------------------------------------------------------
+        stage('Test') {
+            steps {
+                dir('app') {
+                    sh 'npm test'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'app/test-results/*.xml'
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 3: Build Docker Image
+        // ------------------------------------------------------------------
+        stage('Build') {
+            steps {
+                dir('app') {
+                    sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
+                    sh "docker tag ${IMAGE_REPO}:${IMAGE_TAG} ${IMAGE_REPO}:latest"
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 4: Push to Container Registry
+        // ------------------------------------------------------------------
+        stage('Push') {
+            steps {
+                withCredentials([file(credentialsId: 'gcp-service-account', variable: 'GCP_KEY')]) {
+                    sh "gcloud auth activate-service-account --key-file=${GCP_KEY}"
+                    sh "gcloud auth configure-docker --quiet"
+                    sh "docker push ${IMAGE_REPO}:${IMAGE_TAG}"
+                    sh "docker push ${IMAGE_REPO}:latest"
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 5: Security Scan
+        // ------------------------------------------------------------------
+        stage('Security Scan') {
+            steps {
+                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_REPO}:${IMAGE_TAG}"
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 6: Deploy to Staging
+        // ------------------------------------------------------------------
+        stage('Deploy to Staging') {
+            steps {
+                sh """
+                    gcloud container clusters get-credentials ${CLUSTER_NAME} \
+                        --zone ${CLUSTER_ZONE} \
+                        --project ${GCP_PROJECT}
+                """
+                sh """
+                    cd k8s/overlays/staging && \
+                    kustomize edit set image ${IMAGE_REPO}:${IMAGE_TAG} && \
+                    kustomize build . | kubectl apply -f -
+                """
+                sh 'kubectl -n virallens-staging rollout status deployment/virallens-inference --timeout=120s'
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 7: Staging Smoke Tests
+        // ------------------------------------------------------------------
+        stage('Smoke Tests') {
+            steps {
+                sh '''
+                    STAGING_URL=$(kubectl -n virallens-staging get svc virallens-inference -o jsonpath='{.spec.clusterIP}')
+                    curl -sf http://${STAGING_URL}/healthz || exit 1
+                    curl -sf -X POST http://${STAGING_URL}/api/v1/inference \
+                        -H "Content-Type: application/json" \
+                        -d '{"document":"smoke test document"}' || exit 1
+                '''
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 8: Manual Approval Gate for Production
+        // ------------------------------------------------------------------
+        stage('Approval') {
+            steps {
+                input message: 'Deploy to Production?',
+                      ok: 'Approve',
+                      submitter: 'platform-team,devops-leads'
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stage 9: Deploy to Production
+        // ------------------------------------------------------------------
+        stage('Deploy to Production') {
+            steps {
+                sh """
+                    cd k8s/overlays/prod && \
+                    kustomize edit set image ${IMAGE_REPO}:${IMAGE_TAG} && \
+                    kustomize build . | kubectl apply -f -
+                """
+                sh 'kubectl -n virallens-prod rollout status deployment/virallens-inference --timeout=180s'
+            }
+        }
+    }
+
+    post {
+        success {
+            slackSend channel: '#deployments',
+                      color: 'good',
+                      message: "✅ *${env.JOB_NAME}* #${env.BUILD_NUMBER} deployed `${IMAGE_TAG}` to production"
+        }
+        failure {
+            slackSend channel: '#deployments',
+                      color: 'danger',
+                      message: "❌ *${env.JOB_NAME}* #${env.BUILD_NUMBER} failed – <${env.BUILD_URL}|View Build>"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

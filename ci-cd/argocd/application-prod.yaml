@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: virallens-inference-prod
+  namespace: argocd
+  labels:
+    team: platform
+    env: production
+  annotations:
+    # Require manual sync for production (no automated sync)
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: deployments
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: deployments
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: virallens
+  source:
+    repoURL: https://github.com/virallens/genai-infra.git
+    targetRevision: main
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: virallens-prod
+  syncPolicy:
+    # NO automated sync — production requires manual approval via ArgoCD UI/CLI
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

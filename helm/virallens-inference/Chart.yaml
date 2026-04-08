@@ -1,0 +1,8 @@
+apiVersion: v2
+name: virallens-inference
+description: Helm chart for Virallens Generative AI Inference Service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Virallens Platform Team

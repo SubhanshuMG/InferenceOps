@@ -1,0 +1,19 @@
+{
+  "name": "virallens-inference-service",
+  "version": "1.0.0",
+  "description": "Virallens Generative AI Inference Service",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "prom-client": "^15.1.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  }
+}

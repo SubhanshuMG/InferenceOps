@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: virallens-dev
+
+resources:
+  - ../../base
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: virallens-inference
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: inference
+                env:
+                  - name: NODE_ENV
+                    value: "development"
+                  - name: LOG_LEVEL
+                    value: "debug"
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "128Mi"
+                  limits:
+                    cpu: "500m"
+                    memory: "256Mi"
+
+  - patch: |-
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: virallens-inference
+      spec:
+        minReplicas: 1
+        maxReplicas: 3
+
+images:
+  - name: gcr.io/virallens/inference-service
+    newTag: dev-latest

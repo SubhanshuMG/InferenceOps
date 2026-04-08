@@ -1,0 +1,55 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: virallens-prod
+
+resources:
+  - ../../base
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: virallens-inference
+      spec:
+        replicas: 5
+        template:
+          metadata:
+            annotations:
+              cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+          spec:
+            containers:
+              - name: inference
+                env:
+                  - name: NODE_ENV
+                    value: "production"
+                  - name: LOG_LEVEL
+                    value: "warn"
+                resources:
+                  requests:
+                    cpu: "500m"
+                    memory: "512Mi"
+                  limits:
+                    cpu: "2000m"
+                    memory: "1Gi"
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: topology.kubernetes.io/zone
+                whenUnsatisfiable: DoNotSchedule
+                labelSelector:
+                  matchLabels:
+                    app: virallens-inference
+
+  - patch: |-
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: virallens-inference
+      spec:
+        minReplicas: 5
+        maxReplicas: 50
+
+images:
+  - name: gcr.io/virallens/inference-service
+    newTag: v1.0.0
