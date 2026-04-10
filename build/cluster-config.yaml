@@ -1,0 +1,47 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: virallens-gke
+  region: ap-south-1
+  version: "1.30"
+
+iam:
+  withOIDC: true                    # <-- enables IRSA
+
+vpc:
+  cidr: 10.0.0.0/16
+  nat:
+    gateway: Single                 # Single NAT for cost; use HighlyAvailable for prod
+  clusterEndpoints:
+    publicAccess: true              # dev; set false + authorizedNetworks for prod
+    privateAccess: true
+
+managedNodeGroups:
+  - name: general
+    instanceType: t3.medium
+    desiredCapacity: 3
+    minSize: 3
+    maxSize: 10
+    volumeSize: 30
+    privateNetworking: true         # nodes get no public IPs
+    labels: { role: general }
+    tags:
+      environment: dev
+    iam:
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+        externalDNS: true
+        ebs: true
+
+addons:
+  - name: vpc-cni
+  - name: coredns
+  - name: kube-proxy
+  - name: aws-ebs-csi-driver
+
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]

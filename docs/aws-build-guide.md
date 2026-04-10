@@ -26,7 +26,7 @@ aws sts get-caller-identity             # sanity check
 ### Set environment variables
 
 ```bash
-export AWS_REGION=us-east-1
+export AWS_REGION=ap-south-1
 export CLUSTER_NAME=virallens-gke           # keep the name for the interview story
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export ECR_REPO=virallens/inference-service
@@ -51,7 +51,7 @@ export ECR_URI=$(aws ecr describe-repositories \
   --repository-names $ECR_REPO \
   --query 'repositories[0].repositoryUri' --output text)
 echo $ECR_URI
-# e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/virallens/inference-service
+# e.g. 123456789012.dkr.ecr.ap-south-1.amazonaws.com/virallens/inference-service
 ```
 
 ---
@@ -62,8 +62,7 @@ From the repo root:
 
 ```bash
 # Authenticate Docker to ECR
-aws ecr get-login-password --region $AWS_REGION \
-  | docker login --username AWS --password-stdin $ECR_URI
+aws ecr get-login-password --region $AWS_REGION && docker login --username AWS --password-stdin $ECR_URI
 
 # Build for amd64 (important if you're on Apple Silicon)
 cd app
@@ -72,6 +71,17 @@ docker buildx build --platform linux/amd64 \
   -t $ECR_URI:latest \
   --push .
 cd ..
+```
+```bash
+aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+```
+
+```bash
+docker tag e9ae3c220b23 aws_account_id.dkr.ecr.region.amazonaws.com/my-repository:tag
+```
+
+```bash
+docker push aws_account_id.dkr.ecr.region.amazonaws.com/my-repository:tag
 ```
 
 Verify:
@@ -474,7 +484,7 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-south-1
   CLUSTER_NAME: virallens-gke
   ECR_REPO: virallens/inference-service
 
